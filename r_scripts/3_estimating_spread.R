@@ -3,8 +3,19 @@
 # three different approaches: effective range radius, distance regression, and
 # boundary displacement
 #
-# IMPORTANT!!! Downloading the GIS data from Sam (directory gis_data) and storing
+# IMPORTANT!!! Downloading the GIS data from Sam (or Zenodo) (directory gis_data) and storing
 # it in the same directory as the other folders is necessary for this code to run
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
+
+
+
+
+
+# Load in shapefile of USCAN counties with invasion information ----------------
+#
+#
+#---
+source("r_scripts/1_packages.R")
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
 
 
@@ -22,6 +33,7 @@ pts_LakeOH <- st_as_sf(location_of_LakeOH, coords = c("long", "lat"), crs = 4326
 # project into Albers
 pts_LakeOH_ALBERS <- st_transform(pts_LakeOH, 5070)
 
+max_year_of_invasion <- max(USCAN_albers$BLD_YR, na.rm=T)
 #plot(st_geometry(USCAN_albers), col = "lightgrey", border = "black", main = "US + Canada Map")
 #plot(st_geometry(pts_LakeOH_ALBERS), col = "red", pch = 19, cex = 2, add = TRUE)
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
@@ -90,7 +102,7 @@ sec_order[[1]]
 # counties invaded in the first year would
 # be definition be isolated
 # i <- 2013
-for(i in 2013:2024){
+for(i in 2013:max_year_of_invasion){
   
   # current invaded counties in time i
   invaded_in_i <- invaded_counties_all[which(invaded_counties_all$BLD_YR %in% i),]
@@ -145,7 +157,7 @@ for(i in 2013:2024){
     }
   }
   
-  cat("Year", i,"out of", 2024,"\n") 
+  cat("Year", i,"out of", max_year_of_invasion,"\n") 
 }
 
 
@@ -225,58 +237,46 @@ states_provinces_albers_crop = st_read("gis_data/USCAN_combined/states_provinces
 #
 #
 #---
-my_BLD_colors <- viridis(17)
-my_BLD_colors_spec <- brewer.pal(11,"Spectral")
-display.brewer.pal(n = 9, name = 'YlGnBu')
-
-# inset map with bounding box
+my_BLD_colors <- scico(14, palette = 'managua')
+plot(1:14, pch=15, cex=6, col=my_BLD_colors)
 # https://www.r-bloggers.com/2019/12/inset-maps-with-ggplot2/
 bld_bb = st_as_sfc(st_bbox(states_provinces_albers_crop))
+
+### ### ### ### ### ### ### ###
+# Inset map
+### ### ### ### ### ### ### ###
 inset <- ggplot() +
   geom_sf(data = states_provinces_albers, fill="white") + #polygons filled based on the density value
   theme_bw()+theme_void()+
-  geom_sf(data = bld_bb, fill = NA, color = "red", size = 1) +
+  geom_sf(data = bld_bb, fill = alpha("red",0.5), color = "red", size = 3) +
   coord_sf(datum=st_crs(BLD_ALBERS_cropped))
-#
+
+### ### ### ### ### ### ### ###
+# Invaded area time series map
+### ### ### ### ### ### ### ###
+BLD_ALBERS_cropped$f_BLD_YR <- factor(BLD_ALBERS_cropped$BLD_YR)
+length(table(BLD_ALBERS_cropped$f_BLD_YR))
 invaded_area_continuous <- ggplot() +
-  geom_sf(data = BLD_ALBERS_cropped, aes(fill = BLD_YR), color="light gray") + #polygons filled based on the density value
+  geom_sf(data = BLD_ALBERS_cropped, aes(fill = f_BLD_YR), color="light gray") + #polygons filled based on the density value
   theme_bw()+theme_void()+
-  geom_sf(data=states_provinces_albers_crop, fill="transparent", color="black", lwd=1)+
-  scale_fill_gradientn(colors = my_BLD_colors_spec, name="", na.value = "white",   guide = guide_colorbar(frame.colour = "black", ticks.colour = "black"))+
-  theme(legend.position.inside =c(0.6,0.35),legend.key.size = unit(0.5, 'cm'),
+  geom_sf(data=states_provinces_albers_crop, fill="transparent", color="black", lwd=0.1)+
+  scale_fill_manual(values = my_BLD_colors, 
+                    name="", na.value = "white", na.translate = F)+ 
+                       #breaks = seq(2012, 2024, by = 3), 
+                     #  guide = guide_colorbar(frame.colour = "black", ticks.colour = "black"))+
+  theme(legend.position =c(0.9,0.4),legend.key.size = unit(0.2, 'cm'), # c(0.7,0.3)
         legend.text = element_text(size=8), legend.justification = "left")+
-  geom_sf(data=pts_LakeOH_ALBERS, color = "black", size = 5)+
-  # this text labels the point added by the preceding line (= first detection location)
-  # ggrepel::geom_text_repel(
-  #   data = pts_LakeOH_ALBERS,
-  #   aes(label = NAME, geometry = geometry),
-  #   stat = "sf_coordinates",
-  #   min.segment.length = 0,
-  #   nudge_x = Inf,
-  #   colour = "black",
-  #   segment.colour = "black")+
+  geom_segment(
+    data = pts_LakeOH_ALBERS,
+    aes(x = st_coordinates(pts_LakeOH_ALBERS$geometry)[1]-90000, y = st_coordinates(pts_LakeOH_ALBERS$geometry)[2]+10000, 
+        xend = st_coordinates(pts_LakeOH_ALBERS$geometry)[1], yend = st_coordinates(pts_LakeOH_ALBERS$geometry)[2],
+        ),
+    arrow = arrow(length = unit(0.1, "cm"), type = "closed"), # Adds the arrowhead
+    linewidth = 1,
+    color="red") +
   coord_sf(datum=st_crs(BLD_ALBERS_cropped))
-
 #
-resize.win(6.85,5)
-gg_inset_map1_cont = ggdraw() +
-  draw_plot(invaded_area_continuous) +
-  draw_plot(inset, x = 0.65, y = 0.06, width = 0.25, height = 0.25)
-gg_inset_map1_cont
-
-
-
-# code that (hopefully) works on a Mac
-quartz(6.85,5)
-gg_inset_map1_cont = ggdraw() +
-  draw_plot(invaded_area_continuous) +
-  draw_plot(inset, x = 0.65, y = 0.06, width = 0.25, height = 0.25)
-gg_inset_map1_cont
-
-# this code might be helpful for exporting high quality figures down the road
-# tiff("figures/Fig1.tiff", units="in", width=6.85, height=5, res=600)
-# gg_inset_map1_cont
-# dev.off()
+# invaded_area_continuous
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
 
 
@@ -289,6 +289,7 @@ gg_inset_map1_cont
 #
 #
 #---
+if(F){ # change to T if you want to plot beech distribution
 # Load biomass data for American beech (Fagus grandifolia)
 # original data from  (see 2_curation) https://data.fs.usda.gov/geodata/rastergateway/bigmap/index.php
 beech_agb <- rast('gis_data/beech_distribution/beech_rast_10km.tif') 
@@ -309,6 +310,7 @@ little_beech_albers <- little_beech_albers[which(little_beech_albers$CODE != 0),
 little_beech_albers_crop <- st_crop(little_beech_albers, xmin= -380620 + 3555334*0.07, ymin= -381632.5, xmax= 2748212, ymax= 3173701)
 plot(st_geometry(little_beech_albers_crop), col="light green")
 plot(st_geometry(states_provinces_albers_r), add=T, col="transparent", border="black")
+}
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
 
 
@@ -326,12 +328,12 @@ summary(contigUSCAN_ALBERS_BLD)
 
 BLD.adj.iso <- contigUSCAN_ALBERS_BLD[which(contigUSCAN_ALBERS_BLD$STAT %in% c("adj","iso")),]
 
-contigUSCAN_ALBERS_BLD$JumpInv <- ifelse(contigUSCAN_ALBERS_BLD$STAT == "iso", "Non-contiguous", contigUSCAN_ALBERS_BLD$STAT)
-contigUSCAN_ALBERS_BLD$JumpInv <- ifelse(contigUSCAN_ALBERS_BLD$JumpInv == "adj", "Contiguous", contigUSCAN_ALBERS_BLD$JumpInv)
+contigUSCAN_ALBERS_BLD$JumpInv <- ifelse(contigUSCAN_ALBERS_BLD$STAT == "iso", "Non-contig.", contigUSCAN_ALBERS_BLD$STAT)
+contigUSCAN_ALBERS_BLD$JumpInv <- ifelse(contigUSCAN_ALBERS_BLD$JumpInv == "adj", "Contig.", contigUSCAN_ALBERS_BLD$JumpInv)
 
 contigUSCAN_ALBERS_BLD$color <- NA
-contigUSCAN_ALBERS_BLD$color[contigUSCAN_ALBERS_BLD$JumpInv == "Contiguous"] <- "gray"
-contigUSCAN_ALBERS_BLD$color[contigUSCAN_ALBERS_BLD$JumpInv == "Non-contiguous"] <- "tomato2"
+contigUSCAN_ALBERS_BLD$color[contigUSCAN_ALBERS_BLD$JumpInv == "Contig."] <- "gray"
+contigUSCAN_ALBERS_BLD$color[contigUSCAN_ALBERS_BLD$JumpInv == "Non-contig."] <- "tomato2"
 contigUSCAN_ALBERS_BLD$color[is.na(contigUSCAN_ALBERS_BLD$JumpInv)] <- "white"
 
 
@@ -343,21 +345,9 @@ nrow(BLD.adj.iso[which(BLD.adj.iso$STAT == "adj"),])
 nrow(BLD.adj.iso[which(BLD.adj.iso$STAT %in% c("iso","adj")),])
 
 
-adj_col <- rev(viridis(6))[5]
-iso_col <- rev(viridis(6))[2]
-transp_gray <- alpha("light gray",0.3) 
-BLD.adj.iso_fin.crp <- st_crop(contigUSCAN_ALBERS_BLD, BLD_ALBERS_cropped)
-inv.isoadj_map <- ggplot() +
-  geom_sf(data = BLD.adj.iso_fin.crp, aes(fill = JumpInv), color=transp_gray,lwd=0.0001) + #polygons filled based on the density value
-  theme_bw()+theme_void()+
-  geom_sf(data=states_provinces_albers_crop, fill="transparent", color="black", lwd=1)+
-  scale_fill_manual(values= c(adj_col,iso_col),
-                    name="", na.translate=FALSE)+
-  theme(legend.key.size = unit(0.4, 'cm'), legend.text = element_text(size=8), legend.justification = "left",
-        legend.position=c(0.3,0.25))
-
-
-
+### ### ### ### ### ### ### ###
+# Adjacent vs isolated map
+### ### ### ### ### ### ### ###
 isoadj_cty <- BLD.adj.iso %>%  as.data.frame() %>% group_by(BLD_YR,STAT) %>% summarize(counties_invaded = n())
 add_year0 <- data.frame(BLD_YR=2013, STAT="iso",  counties_invaded=0)
 isoadj_cty <- rbind.data.frame(add_year0,isoadj_cty)
@@ -368,23 +358,83 @@ year_county_summary <- as.data.frame(BLD.adj.iso) %>% group_by(BLD_YR) %>% summa
 summary(year_county_summary$counties_invaded)
 stderr(year_county_summary$counties_invaded)
 
-inv.isoadj_graph <- 
-  ggplot(isoadj_cty,  aes(x=BLD_YR, y=counties_invaded, fill=STAT)) +
-  geom_area( aes(fill=STAT), position="stack")+
-  labs(title="",x="Year", y = "Counties invaded")+theme_clean+
+adj_col <- "#73C0E7" #my_BLD_colors[2]
+iso_col <- "#E6A85A"
+transp_gray <- alpha("light gray",0.3) 
+BLD.adj.iso_fin.crp <- st_crop(contigUSCAN_ALBERS_BLD, BLD_ALBERS_cropped)
+inv.isoadj_map <- ggplot() +
+  geom_sf(data = BLD.adj.iso_fin.crp, aes(fill = JumpInv), color=transp_gray,lwd=0.0001) + #polygons filled based on the density value
+  theme_bw()+theme_void()+
+  geom_sf(data=states_provinces_albers_crop, fill="transparent", color="black", lwd=0.1)+
+  scale_fill_manual(values= c(adj_col,iso_col),
+                    name="", na.translate=FALSE)+
+  # theme(legend.key.size = unit(0.4, 'cm'), legend.text = element_text(size=8), legend.justification = "left",
+  #       legend.position=c(0.3,0.25))
+theme(legend.position = c(0.8,0.40),legend.key.size = unit(0.2, 'cm'), # 
+      legend.text = element_text(size=8), legend.justification = "left")
+
+gg_inset_map1_isoadj = ggdraw() +
+  draw_plot(inv.isoadj_map) +
+  draw_plot(inset, x = 0.62, y = 0.05, width = 0.25, height = 0.25)
+
+
+### ### ### ### ### ### ### ###
+# Adjacent vs isolated area graph (OLD)
+### ### ### ### ### ### ### ###
+
+# 
+# inv.isoadj_graph_AREA <- 
+#   ggplot(isoadj_cty,  aes(x=BLD_YR, y=counties_invaded, fill=STAT)) +
+#   geom_area( aes(fill=STAT), position="stack")+
+#   labs(title="",x="Year", y = "Counties invaded")+theme_clean+
+#   scale_fill_manual(values=c(adj_col, iso_col),labels = c("Contiguous", "Non-contiguous"))+
+#   scale_x_continuous(expand = c(0, 0))+ # x axis is getting cut-off
+#   scale_y_continuous(expand = c(0, 0))+ # x axis is getting cut-off
+#   theme(legend.position="none",legend.key.size = unit(0.4, 'cm'), legend.text = element_text(size=8),
+#         legend.justification = "left", legend.title = element_blank(),  plot.margin = margin(10, 10, 10, 10))+
+#   annotate('text', x = 2014, y = 30, label =  paste("italic(n)", "~invaded~counties==", nrow(BLD.adj.iso)), parse = T, size=3, check_overlap = TRUE,  hjust = 0)+
+#   geom_text(x = 2014, y = 26, label = "xx contiguous", parse = F, size=3,check_overlap = TRUE,  hjust = 0)+
+#   geom_text(x = 2014, y = 22, label = "xx non-contiguous", parse = F, size=3,check_overlap = TRUE,  hjust = 0)
+# 
+
+
+
+### ### ### ### ### ### ### ###
+# Adjacent vs isolated stacked bar
+### ### ### ### ### ### ### ###
+df_total <- isoadj_cty %>%
+  group_by(BLD_YR) %>%
+  summarise(total = sum(counties_invaded))
+
+inv.isoadj_graph <- ggplot(isoadj_cty, aes(x=BLD_YR, y=counties_invaded, fill=STAT)) +
+  # Create stacked bars
+  geom_bar(stat="identity", position="stack") +
+  # Add totals on top
+  geom_text(data=df_total, 
+            aes(x=BLD_YR , y=total, label=total, fill=NULL), 
+            vjust=-0.5, 
+            size=2, 
+            fontface="bold") +
   scale_fill_manual(values=c(adj_col, iso_col),labels = c("Contiguous", "Non-contiguous"))+
-  scale_x_continuous(expand = c(0, 0))+ # x axis is getting cut-off
-  scale_y_continuous(expand = c(0, 0))+ # x axis is getting cut-off
+  scale_x_continuous( breaks = seq(2012, 2025, by = 2))+ # x axis is getting cut-off
+  scale_y_continuous(limits= c(0, 75), expand = c(0, 0))+ # x axis is getting cut-off
+  # Formatting: Colors, titles, and theme
+  theme_clean+
   theme(legend.position="none",legend.key.size = unit(0.4, 'cm'), legend.text = element_text(size=8),
         legend.justification = "left", legend.title = element_blank(),  plot.margin = margin(10, 10, 10, 10))+
-  annotate('text', x = 2014, y = 30, label =  paste("italic(n)", "~invaded~counties==", nrow(BLD.adj.iso)), parse = T, size=3, check_overlap = TRUE,  hjust = 0)+
-  geom_text(x = 2014, y = 26, label = "xx contiguous", parse = F, size=3,check_overlap = TRUE,  hjust = 0)+
-  geom_text(x = 2014, y = 22, label = "xx non-contiguous", parse = F, size=3,check_overlap = TRUE,  hjust = 0)
+  annotate('text', x = 2013, y = 60, label =  paste("italic(n)", "~invaded~counties==", nrow(BLD.adj.iso)), parse = T, size=3, check_overlap = TRUE,  hjust = 0)+
+  geom_text(x = 2013, y = 55, label = "219 contiguous", parse = F, size=3,check_overlap = TRUE,  hjust = 0)+
+  geom_text(x = 2013, y = 50, label = "82 non-contiguous", parse = F, size=3,check_overlap = TRUE,  hjust = 0)+
+  labs(
+       x="Year",
+       y="Invaded counties",
+       fill="")
 
 
-# legend.position=c(0.1,0.8)
-bquote(italic("n")~"="~.nrow(BLD.adj.iso$STAT)~"invaded counties")
 
+### ### ### ### ### ### ### ###
+# Isolated jump distances
+### ### ### ### ### ### ### ###
 iso_only <- BLD.adj.iso[which(BLD.adj.iso$STAT == "iso"),]
 summary(iso_only$D_BDY_km)
 round(mean(iso_only$D_BDY_km),0)
@@ -404,13 +454,26 @@ inv.isoadj_hist <-
   scale_y_continuous(expand = c(0, 0), limits= c(0,15))+ # x axis is getting cut-off
   theme(panel.border = element_blank(),panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank(), axis.line = element_line(colour = "black"),  plot.margin = margin(10, 10, 10, 10))+
-  geom_text(x = 200, y = 10, label = "Mean ± SE = 113 ± 11 km", parse = F, size=3,check_overlap = TRUE,  hjust = 0)+
-  geom_text(x = 200, y = 8, label = "Median = 82 km", parse = F, size=3,check_overlap = TRUE,  hjust = 0)
+  geom_text(x = 200, y = 10, label = "Mean ± SE = 114 ± 10 km", parse = F, size=3,check_overlap = TRUE,  hjust = 0)+
+  geom_text(x = 200, y = 8.8, label = "Median = 78 km", parse = F, size=3, check_overlap = TRUE,  hjust = 0)
 
-resize.win(3.30709,7)
+resize.win(3.30709*2,7)
 
 # make the patchwork graph
-inv.isoadj_map / inv.isoadj_graph / inv.isoadj_hist # Places plots side-by-side
+figure1_export <- (invaded_area_continuous | gg_inset_map1_isoadj)/
+(inv.isoadj_graph | inv.isoadj_hist) +
+  plot_annotation(tag_levels = 'A')  # Places plots side-by-side
+  #ggsave("figures/figure1.tiff", plot = figure1_export, device = "pdf", width = 3.30709*2, height = 7, units = "in", dpi = 300)
+
+
+figure1_export <- ggarrange(invaded_area_continuous, gg_inset_map1_isoadj, inv.isoadj_graph, inv.isoadj_hist, 
+                            ncol = 2, nrow = 2,
+                            labels = c("A", "B", "C", "D"))
+
+# tiff("figures/figure1.tiff", width = 3.30709*2, height = 7, units = "in", res = 300, compression = "lzw")
+# print(figure1_export)
+# dev.off()
+# beep(1)
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
 
 
@@ -429,7 +492,7 @@ inv.isoadj_map / inv.isoadj_graph / inv.isoadj_hist # Places plots side-by-side
 contigUSCAN_ALBERS_BLD$county_area <- st_area(contigUSCAN_ALBERS_BLD)
 
 # create a data frame to be populated with year and area invaded 
-annual_sprd <- data.frame(year=2012:2024, area_invaded_km2=NA)
+annual_sprd <- data.frame(year=2012:max_year_of_invasion, area_invaded_km2=NA)
 years.to.plot <- sort(unique(contigUSCAN_ALBERS_BLD$BLD_YR))
 i <- years.to.plot[1]
 # for loop that populates the annual_sprd data frame
@@ -486,9 +549,8 @@ lm_eqn <- function(df){
   as.character(as.expression(eq));
 }
 ## graphing --------------------------------------------------------------------
-y_initial_ERR <- 380 # y location where text will be displayed on graph 
-color_dots <- viridis(6)[1] # color of the points
-seg_pt_col <- rev(viridis(6))[3] # color of the line segments
+y_initial_ERR <- 450 # y location where text will be displayed on graph 
+color_dots <- "#5A7DBA" # my_BLD_colors[11]# color of the points
 min_x <- 2013 # minimum x value 
 
 # graph for analysis of full time series
@@ -496,7 +558,7 @@ fig_ERR <- ggplot(data=annual_sprd, aes(x=year, y=radius)) +
   ylab("Radius of invaded area (km)")+
   xlab("Year")+ theme_bw()+
   
-  scale_x_continuous(breaks = seq(2012,2024,2), limits=c(2012,2025), expand = c(0,0)) +
+  scale_x_continuous(breaks = seq(2012,2026,2), limits=c(2012,2027), expand = c(0,0)) +
   scale_y_continuous(breaks = seq(0,500,100), limits=c(0,500), expand = c(0,0)) +
   
   geom_point(aes(x = (year), y = radius), col=color_dots, size=3)+
@@ -508,31 +570,34 @@ fig_ERR <- ggplot(data=annual_sprd, aes(x=year, y=radius)) +
         panel.background = element_blank(), axis.line = element_line(colour = "black"))
 
 
-
 # graph for segmented regression
+adjustment_btw_text <- 25
+summary(annual_sprd)
 fig_ERR_SEGMENT <- ggplot(data=annual_sprd, aes(x=year, y=radius)) +
   ylab("Radius of invaded area (km)")+
   xlab("Year")+ theme_bw()+
   
-  scale_x_continuous(breaks = seq(2012,2024,2), limits=c(2012,2025), expand = c(0,0)) +
+  scale_x_continuous(breaks = seq(2012,2025,2), limits=c(2012,2026), expand = c(0,0)) +
   scale_y_continuous(breaks = seq(0,500,100), limits=c(0,500), expand = c(0,0)) +
   
-  geom_point(aes(x = (year), y = radius), col=seg_pt_col, size=3)+
-  stat_smooth(data = annual_sprd_BREAK_BEFORE, method = "lm", col = "black", se=F)+
-  geom_text(x = min_x+1, y = y_initial_ERR, label = lm_eqn(annual_sprd_BREAK_BEFORE), parse = TRUE, size=3, check_overlap = TRUE, hjust = 0)+
-  annotate("segment", x = min_x, y = y_initial_ERR, xend =  min_x+0.8, yend = y_initial_ERR, colour = "black", size=0.8)+
+  geom_point(aes(x = (year), y = radius), col=color_dots, size=3)+
+  
+  stat_smooth(data = annual_sprd, method = "lm", col = "black", se=F)+
+  geom_text(x = min_x+1.4, y = y_initial_ERR+adjustment_btw_text, label = lm_eqn(annual_sprd), parse = TRUE, size=2, check_overlap = TRUE, hjust = 0)+
+  annotate("segment", x = min_x, y = y_initial_ERR+adjustment_btw_text, xend =  min_x+1.2, yend = y_initial_ERR+adjustment_btw_text, colour = "black", size=0.8)+
+  
+  
+  stat_smooth(data = annual_sprd_BREAK_BEFORE, method = "lm", col = "black", se=F, linetype="dotted")+
+  geom_text(x = min_x+1.4, y = y_initial_ERR, label = lm_eqn(annual_sprd_BREAK_BEFORE), parse = TRUE, size=2, check_overlap = TRUE, hjust = 0)+
+  annotate("segment", x = min_x, y = y_initial_ERR, xend =  min_x+1, yend = y_initial_ERR, colour = "black", size=1.2, linetype="dotted")+
   
   stat_smooth(data = annual_sprd_BREAK_AFTER, method = "lm", col = "black", se=F, linetype="dashed")+
-  geom_text(x = min_x+1, y = y_initial_ERR-55, label = lm_eqn(annual_sprd_BREAK_AFTER), parse = TRUE, size=3,check_overlap = TRUE,  hjust = 0)+
-  annotate("segment", x = min_x, y = y_initial_ERR-55, xend =  min_x+0.8, yend = y_initial_ERR-55, colour = "black",size=0.8, linetype="dashed")+
+  geom_text(x = min_x+1.4, y = y_initial_ERR-adjustment_btw_text, label = lm_eqn(annual_sprd_BREAK_AFTER), parse = TRUE, size=2,check_overlap = TRUE,  hjust = 0)+
+  annotate("segment", x = min_x, y = y_initial_ERR-adjustment_btw_text, xend =  min_x+1.2, yend = y_initial_ERR-adjustment_btw_text, colour = "black",size=0.8, linetype="dashed")+
   
   theme(panel.border = element_blank(),panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-        panel.background = element_blank(), axis.line = element_line(colour = "black"))
+        panel.background = element_blank(), axis.line = element_line(colour = "black"));fig_ERR_SEGMENT
 
-
-# make the patchwork graph
-resize.win(6.85,6)
-fig_ERR / fig_ERR_SEGMENT
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
 
 
@@ -563,7 +628,7 @@ confint(fit_sprd2)
 ## graphing ---------------------------------------------------------------------
 # need this for adding equation information to graph
 lm_eqn2 <- function(df){# NOTE: response and predictor have to be specified here
-  m <- lm(D_BDY_km ~ BLD_YR, sprd_df);
+  m <- lm(DtoDL_km ~ BLD_YR, sprd_df);
   eq <- substitute(italic(y) == a + b * italic(x)*","~~italic(r)^2~"="~r2, 
                    list(a = format(unname(coef(m)[1]), digits = 2),
                         b = format(unname(coef(m)[2]), digits = 2),
@@ -572,24 +637,23 @@ lm_eqn2 <- function(df){# NOTE: response and predictor have to be specified here
 }
 
 # colors for graph
-DR_col <- wes_palette("GrandBudapest1", 3, type="discrete")[1]
+DR_col <- color_dots
 
-summary(sprd_df$D_BDY_km)
+summary(sprd_df$DtoDL_km)
 summary(sprd_df$BLD_YR)
 
-fig_DR <- ggplot(data=sprd_df, aes(x=BLD_YR, y=D_BDY_km)) +
+fig_DR <- ggplot(data=sprd_df, aes(x=BLD_YR, y=DtoDL_km)) +
   ylab("Distance (km)")+
   xlab("Year")+ theme_bw()+
-  #geom_point(aes(x = BLD_YR, y = DtoDL_km), col=DR_col, size=2)+
   geom_jitter(aes(x = BLD_YR, y = DtoDL_km), position = position_jitter(width = 0.1, height = 0), alpha = 0.7, color=DR_col) +
   
-  stat_smooth(data = sprd_df, fullrange=T, method = "lm", col = "black", se=F,  xseq = seq(2013,2024.5, length=100))+
+  stat_smooth(data = sprd_df, fullrange=T, method = "lm", col = "black", se=F,  xseq = seq(2013,2025.5, length=100))+
   
   scale_x_continuous(breaks = seq(2013,2025,2), limits=c(2012.8,2025.5), expand = c(0,0)) +
   scale_y_continuous(breaks = seq(0,1200,300), limits=c(0,1200), expand = c(0,0)) +
   
   #geom_text(x = 2005, y = 1200, label = expression("Spread = 43 ± 4 km/yr (95% CI: 35-51)"), size=6,check_overlap = TRUE, hjust = 0)+
-  geom_text(x = 2014, y = 1000, label = lm_eqn2(sprd_df), parse = TRUE, size=3,check_overlap = TRUE, hjust = 0)+
+  geom_text(x = 2014, y = 1150, label = lm_eqn2(sprd_df), parse = TRUE, size=3,check_overlap = TRUE, hjust = 0)+
   #geom_text(x = 2005, y = 875, label = expression(italic(F)["1,253"]*"= 144.9, "*italic(p)*" < 0.0001"),  size=6,check_overlap = TRUE, hjust = 0)+
   
   theme(panel.border = element_blank(),panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
@@ -635,7 +699,7 @@ st_wedges <- function(x, y, r, nsegs){
 
 # wedge creation
 # set up the data frame, first with years of the study
-sprd_rad <- data.frame(year=2012:2024)
+sprd_rad <- data.frame(year=2012:max_year_of_invasion)
 # set the radii size
 radii_n <- seq(0,360-22.5,22.5) # emanating every 22.5°
 # create a data frame to populated (spread per year per radii)
@@ -730,7 +794,7 @@ for(r in 1:nrow(int_all)){
   if(FIPS_INV_FAR == FIPS_FAR){ # if the farthest county in a wedge is invaded, find the year in which that happened
     wedge_id[r,"year"] <- max_val_invaded_cty$BLD_YR 
   } else{
-    wedge_id[r,"year"] <- 2024
+    wedge_id[r,"year"] <- max_year_of_invasion
   }
 }
 
@@ -753,9 +817,9 @@ for(b in bearings){
     sprd.rads.BLD_proc <- curr_bearing_trunc} else{
       sprd.rads.BLD_proc <- rbind.data.frame(sprd.rads.BLD_proc,curr_bearing_trunc)}
 }
-sprd.rads.BLD.g <- sprd.rads.BLD_proc %>% group_by(bearing) %>% summarise(mn_sprd_km = mean(sprd_increment), max_sprd_km = sum(sprd_increment))
+sprd.rads.BLD.g <- sprd.rads.BLD_proc %>% group_by(bearing) %>% summarise(mn_sprd_km = mean(sprd_increment), max_sprd_km = sum(sprd_increment), SE = stderr(sprd_increment))
 summary(sprd.rads.BLD.g)
-
+stderr(sprd.rads.BLD.g$mn_sprd_km)
 
 #https://www.r-graph-gallery.com/136-stacked-area-chart
   # ggplot(sprd.rads.BLD, aes(x = bearing, y = sprd_increment, fill=factor(year))) +
@@ -772,13 +836,16 @@ summary(sprd.rads.BLD.g)
   # theme(panel.border = element_blank(),panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
   #       panel.background = element_blank(), axis.line = element_line(colour = "black"))
 
-
+### ### ### ### ### ### ### ###
+# Bar chart by bearings/year plot
+### ### ### ### ### ### ### ###
 col_bearings <- ggplot(sprd.rads.BLD, aes(x = bearing, y = sprd_increment, fill=factor(year))) +
-  geom_bar(position="stack", stat="identity") +
-  theme_bw()+
+  geom_bar(stat="identity", position = position_stack(reverse = TRUE)) +
+  scale_fill_manual(values = my_BLD_colors)+ 
+                   # name="", na.value = "white", na.translate = F)+   theme_bw()+
   xlab("Bearing")+
   ylab("Spread distance (km)")+
-  theme(legend.key.size = unit(0.3, 'cm'), legend.text = element_text(size=7), legend.justification = "left")+
+  theme(legend.position = c(0.8,0.6), legend.key.size = unit(0.2, 'cm'), legend.text = element_text(size=6), legend.justification = "left")+
   theme(panel.border = element_blank(),panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank(), axis.line = element_line(colour = "black"))+
   guides(fill = guide_legend(title = NULL))
@@ -795,26 +862,27 @@ st_crs(wedges_4) <- crs(contigUSCAN_ALBERS_BLD)
 sequence_labels_circle <- seq(0,337.5,22.5*2) # needs to reflect numer of wedges
 label_x <- (wedge_length+300)*1000*sin((pi*sequence_labels_circle)/180)+discx
 label_y <- (wedge_length+300)*1000*cos((pi*sequence_labels_circle)/180)+discy
-
-inset_circle <- ggplot() +
-  geom_sf(data = wedges_4, fill="transparent", col="transparent") + # polygons filled based on the density value
-  geom_sf(data = BLD_ALBERS_cropped, aes(fill = BLD_YR), color="light gray") + #polygons filled based on the density value
-  theme_bw()+theme_void()+
-  geom_sf(data=states_provinces_albers_crop, fill="transparent", color="black", lwd=1)+
-  scale_fill_gradientn(colors = my_BLD_colors_spec, name="", na.value = "white",   guide = "none")+
-  theme(legend.position="none",legend.key.size = unit(0.5, 'cm'),
-        legend.text = element_text(size=8), legend.justification = "left")+
-  geom_sf(data=pts_LakeOH_ALBERS, color = "black", size = 3)+
-  #geom_sf(data = wedges, fill="transparent", col="light gray") + # polygons filled based on the density value
-  theme_bw()+theme_void()+
-  geom_sf(data =wedges_16, fill="transparent", col="black", size=0.5)+# polygons filled based on the density value
-  annotate("text", label=sequence_labels_circle, x=label_x, y=label_y, size=3)
-
-resize.win(6.85,4)
-gg_inset_bearings = ggdraw() +
-  draw_plot(col_bearings) +
-  draw_plot(inset_circle, x = 0.4, y = 0.55, width = 0.4, height = 0.4)
-gg_inset_bearings
+# 
+# my_BLD_colors_spec <- brewer.pal(11,"Spectral")
+# inset_circle <- ggplot() +
+#   geom_sf(data = wedges_4, fill="transparent", col="transparent") + # polygons filled based on the density value
+#   #geom_sf(data = BLD_ALBERS_cropped, aes(fill = BLD_YR), color="light gray") + #polygons filled based on the density value
+#   theme_bw()+theme_void()+
+#   geom_sf(data=states_provinces_albers_crop, fill="transparent", color="black", lwd=0.1)+
+#   scale_fill_gradientn(colors = my_BLD_colors_spec, name="", na.value = "white",   guide = "none")+
+#   theme(legend.position="none",legend.key.size = unit(0.5, 'cm'),
+#         legend.text = element_text(size=8), legend.justification = "left")+
+#   geom_sf(data=pts_LakeOH_ALBERS, color = "black", size = 3)+
+#   #geom_sf(data = wedges, fill="transparent", col="light gray") + # polygons filled based on the density value
+#   theme_bw()+theme_void()+
+#   geom_sf(data =wedges_16, fill="transparent", col="black", size=0.5)+# polygons filled based on the density value
+#   annotate("text", label=sequence_labels_circle, x=label_x, y=label_y, size=3)
+# 
+# resize.win(6.85,4)
+# gg_inset_bearings = ggdraw() +
+#   draw_plot(col_bearings) +
+#   #draw_plot(inset_circle, x = 0.55, y = 65, width = 0.35, height = 0.35)
+# gg_inset_bearings
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
 
 
@@ -826,32 +894,37 @@ sprd.rads.avg <- sprd.rads.BLD_proc %>% group_by(bearing) %>% summarise(mean_spr
 summary(sprd.rads.avg)
 
 sprd.rads.avg[order(sprd.rads.avg$mean_sprd, decreasing=T),]
-BD_col <- wes_palette("GrandBudapest1", 3, type="discrete")[2]
+BD_col <- color_dots
 resize.win(6.85,6.85)
 unit_adj <- 1
 
-bearing_histogram <- 
-  ggplot(sprd.rads.avg, aes(x = bearing, y = mean_sprd)) +
-  coord_polar(theta = "x", start = 0, clip="off") +
-  geom_bar(stat = "identity", col= "black", fill = BD_col, width = 22.5) +
-  geom_hline(yintercept = seq(0, 120, by = 20), color = "black", size = 0.2) +
-  scale_y_continuous(breaks = seq(0,120,20), limits=c(0,120), expand = c(0,0)) +
-  scale_x_continuous(breaks = seq(0,360-22.5,22.5), limits=c(0,360), expand= c(0,0)) +
-  labs(x = "", y = "", title = "") +
-  theme_bw()+ 
+bearing_histogram <- ggplot(sprd.rads.avg,
+       aes(x = bearing, y = mean_sprd)) +
+  geom_col(width = 22.5, fill = BD_col, color = "black") +
+  coord_polar(start = -pi/12+0.05) + # change start value if you want a different orientation
+  scale_x_continuous(breaks = seq(0,270, 45)) +
+  scale_y_continuous(breaks = seq(0, 100, 20))+ # x axis is getting cut-off
+  theme_bw() +
+  theme(axis.title = element_blank(),
+        panel.ontop = TRUE, # change to FALSE for grid lines below the wind rose
+        panel.background = element_blank())+
+  annotate("text", x=30, y=seq(20,100,20), label= seq(20,100,20), size=3, hjust=1.2, vjust=1, fontface = 2)+
+  #annotate("text", x=seq(0,270, 45), y=120, label= seq(0,270, 45), size=3, hjust=1, vjust=1, fontface = 2)+
+  
   theme(panel.grid.minor = element_blank(),
-                    #panel.grid.major.x = element_blank(),
-                    panel.background = element_blank(),
-                    panel.grid.major.x = element_line(colour="black", linetype="dashed"),
-                    panel.grid.major.y = element_blank(), panel.border = element_blank(),
-                    axis.ticks.y = element_blank(),
-                    axis.text.y = element_blank(),
-                    axis.text=element_text(size=8),
-                    axis.title=element_text(size=12),
-                    plot.margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "mm"))+
-  annotate("text", x=359, y=seq(20,120,20)+8, label= seq(20,120,20), size=3, hjust=1, vjust=1, fontface = 2)
+        #panel.grid.major.x = element_blank(),
+        panel.background = element_blank(),
+        panel.grid.major.x = element_line(colour="black", linetype="dashed"),
+        panel.grid.major.y = element_line(colour="black", linetype="dashed"),
+        panel.border = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.text=element_text(size=12,face="bold"),
+        axis.title=element_blank(),
+        plot.margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "mm"))
 
-# NOTE THAT spread distances jump further here (with BD method) because you are
+
+# NOTE that spread distances jump further here (with BD method) because you are
 # just measuring jumps along radii, and not jumps from nearest county
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
 
@@ -908,12 +981,14 @@ wedges_p <- ggplot() +
 wedges_p
 
 
-# make the patchwork graph
-resize.win(6.85,8)
-invaded_area_discrete / wedges_p
-#'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
-#'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+figure2_export <- ggarrange(fig_ERR_SEGMENT, fig_DR, col_bearings, bearing_histogram, 
+                            ncol = 2, nrow = 2,
+                            labels = c("A", "B", "C", "D"))
+# the WARNING is for the predicted regression line in panel A going below 0
 
 
-
-  
+# 2. Export to a file (supports pdf, png, jpeg, etc.)
+# pdf("figures/figure2.pdf", width = 3.30709*2, height = 7)
+# print(figure2_export)
+# dev.off()
+### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 

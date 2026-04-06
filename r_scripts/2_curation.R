@@ -10,8 +10,11 @@
 #
 #
 #---
-# Obtained from USDA FS on June 23, 2025
-BLD_cty <- read_excel("spreadsheets/county_level_BLD_data/US BLD Counties by Year 2024.xlsx")
+# Obtained from USDA FS on June 23, 2025 (2024 data)
+# Obtained from USDA FS on January 20, 2026 (2025 data)
+BLD_cty_2024 <- read_excel("spreadsheets/county_level_BLD_data/US BLD Counties by Year 2024.xlsx")
+nrow(BLD_cty_2024)
+BLD_cty <- read_excel("spreadsheets/county_level_BLD_data/US BLD Counties by Year 2025.xlsx")
 nrow(BLD_cty)
 BLD_cty$State_province <- toupper(BLD_cty$State_province)
 BLD_cty <- as_tibble(BLD_cty)
@@ -32,12 +35,18 @@ BLD_cty[BLD_cty$County=="Muskingham","County"] <- "Muskingum"
 BLD_cty[BLD_cty$County=="DE","County"] <- "Delaware"
 # misspelling
 BLD_cty[BLD_cty$County=="Montogomery","County"] <- "Montgomery"
+# missing an apostrophe
+BLD_cty[BLD_cty$County=="Prince Georges","County"] <- "Prince George's"
+# Washington DC
+BLD_cty[BLD_cty$County=="Washington DC","County"] <- "District Of Columbia"
+BLD_cty[BLD_cty$State_province=="WASHINGTON DC","State_province"] <- "DC"
+
+# this county was missing year, so we input it (confirmed year by looking at USDA FS maps online)
+BLD_cty[which(BLD_cty$County=="Kent" & BLD_cty$State_province=="DE"),"BLD_Year"] <- 2025
 
 # this county is missing - determined from later visual inspection of maps
 df_BedfordPA <- data.frame(State_province="PA", County="Bedford",  BLD_Year=2021)
 BLD_cty <- rbind.data.frame(BLD_cty,df_BedfordPA)
-
-
 
 # remove duplicates
 # Counties should not be repeated within a state, so create an ID variable
@@ -72,7 +81,6 @@ nrow(BLD_US_only)
 # load in FIPS identifiers
 data("fips_codes", package = "tidycensus")
 head(fips_codes)
-fips_codes$county
 fips_clean <- fips_codes %>%
   mutate(
     State_province = state,
@@ -81,6 +89,7 @@ fips_clean <- fips_codes %>%
       str_trim() %>%
       str_to_title()
   )
+
 
 # create a copy of database
 BLD_all <- BLD_cty_first
@@ -93,6 +102,9 @@ BLD_all_joined <- BLD_all %>%
 BLD_all_joined$full_fips <- ifelse(is.na(BLD_all_joined$state_code) | is.na(BLD_all_joined$county_code),
                                    NA, paste0(BLD_all_joined$state_code, BLD_all_joined$county_code))
 
+#
+BLD_all_joined[is.na(BLD_all_joined$full_fips),]
+unique(BLD_all_joined[is.na(BLD_all_joined$full_fips),"State_province"])
 
 # FIPS fully assigned to all US counties?
 sum(table(BLD_all_joined$full_fips)) == nrow(BLD_US_only)
@@ -124,6 +136,7 @@ combined_sf_matched_US <- US_counties %>%
 # plot(st_geometry(combined_sf_matched_US))
 table(combined_sf_matched_US$BLD_Year)
 sum(table(combined_sf_matched_US$BLD_Year)) # US counties invaded
+sum(table(BLD_all_joined[which(BLD_all_joined$full_fips %in% combined_sf_matched_US$full_fips),"State_province"]))
 
 # Load in CAN shapefile --------------------------------------------------------
 #
@@ -142,6 +155,7 @@ CAN_counties_all <- CAN_countiesall1 %>%
 
 # Load in Canada "county" codes
 # https://www23.statcan.gc.ca/imdb/p3VD.pl?Function=getVD&TVD=134850&CVD=134851&CPV=35&CST=01012001&CLV=1&MLV=3
+# Manually transribed "Census division" column into "County" column in Excel
 CAN_cty <- read_excel("spreadsheets/CSD_codes/CSD_codes.xlsx")
 CAN_cty <- CAN_cty[,c("CDUID", "County")]
 
@@ -149,6 +163,7 @@ CAN_cty <- CAN_cty[,c("CDUID", "County")]
 table(BLD_all_joined$State_province) # just Ontario has been invaded
 BLD_CAN_only <- BLD_all_joined[which(BLD_all_joined$State_province  == "ONTARIO"),]
 nrow(BLD_CAN_only) + sum(table(combined_sf_matched_US$BLD_Year)) == nrow(BLD_all_joined)
+
 # combine invasion data with county codes
 BLD_CAN_only <- BLD_CAN_only %>%
   left_join(CAN_cty, by = "County")
@@ -160,7 +175,6 @@ combined_sf_matched_CAN <- CAN_counties_all %>%
 # QAQC: check all invaded Canadian counties transferred 
 sum(table(combined_sf_matched_CAN$BLD_Year)) == sum(table(BLD_CAN_only$CDUID))
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### 
-
 
 
        

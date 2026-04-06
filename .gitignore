@@ -1,6 +1,9 @@
 # Large beech raster
 /raw_beech_raster
 /gis_data
+/manuscript
+/sources
+/figures
 
 # History files
 .Rhistory
