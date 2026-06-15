@@ -7,7 +7,9 @@
 
 
 # zip files
-.zip
+gis_data.zip
+raw_beech_raster.zip
+spreadsheets.zip
 
 # History files
 .Rhistory
