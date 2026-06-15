@@ -5,6 +5,10 @@
 /sources
 /figures
 
+
+# zip files
+.zip
+
 # History files
 .Rhistory
 .Rapp.history
